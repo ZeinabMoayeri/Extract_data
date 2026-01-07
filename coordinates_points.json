@@ -91,6 +91,7 @@
     {"page_number": 2, "sheet_name": "ShiftTotalHerasat", "coordinates": [738, 392, 787, 582]},
     {"page_number": 2, "sheet_name": "ShiftTotalOrdogahi", "coordinates": [788, 392, 822, 582]},
     {"page_number": 3, "sheet_name": "EmployerPage3", "coordinates": [61, 183, 822, 580]},
+    {"page_number": 3, "sheet_name": "EmployerSupervisor", "coordinates": [642, 6, 817, 183]},
     {"page_number": 3, "sheet_name": "EmployerTotal", "coordinates": [62, 12, 144, 183]},
     {"page_number": 4, "sheet_name": "DrillingPage4", "coordinates": [62, 183, 608, 586]},
     {"page_number": 4, "sheet_name": "DrillingTotal", "coordinates": [62, 12, 144, 183]},
