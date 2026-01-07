@@ -21,6 +21,23 @@ def load_coordinates_points(file_path):
     except Exception:
         print("Unexpected error while loading coordinates points")  
     return []
+
+def convert_to_int(value):
+    """
+    تبدیل مقدار string به int
+    اگر خالی است یا نمی‌تواند تبدیل شود، 0 برمی‌گرداند
+    اعداد منفی را هم درست پردازش می‌کند
+    """
+    if not value or value == "":
+        return 0
+    try:
+        # حذف فاصله‌ها و تبدیل به int (اعداد منفی را حفظ می‌کند)
+        clean_val = str(value).strip().replace(" ", "").replace(",", "")
+        if clean_val:
+            return int(clean_val)
+        return 0
+    except:
+        return 0
     
 def convert_header_to_key_value(df):
     if df.empty:
@@ -122,11 +139,11 @@ def convert_shift_to_structured(df):
     if total_row_index >= 0:
         total_row = data_rows[total_row_index]
         total_shift = {
-            "ص": str(total_row.get(4, "")).strip() if 4 in total_row else "",
-            "ن": str(total_row.get(3, "")).strip() if 3 in total_row else "",
-            "ش": str(total_row.get(2, "")).strip() if 2 in total_row else "",
-            "پ": str(total_row.get(1, "")).strip() if 1 in total_row else "",
-            "خ": str(total_row.get(0, "")).strip() if 0 in total_row else ""
+            "ص": convert_to_int(total_row.get(4, "") if 4 in total_row else ""),
+            "ن": convert_to_int(total_row.get(3, "") if 3 in total_row else ""),
+            "ش": convert_to_int(total_row.get(2, "") if 2 in total_row else ""),
+            "پ": convert_to_int(total_row.get(1, "") if 1 in total_row else ""),
+            "خ": convert_to_int(total_row.get(0, "") if 0 in total_row else "")
         }
         # حذف ردیف Total از لیست داده‌ها
         data_rows = data_rows[:total_row_index]
@@ -143,11 +160,11 @@ def convert_shift_to_structured(df):
         person = {
             "name": name,
             "position": position,
-            "ص": str(row.get(4, "")).strip() if 4 in row else "",
-            "ن": str(row.get(3, "")).strip() if 3 in row else "",
-            "ش": str(row.get(2, "")).strip() if 2 in row else "",
-            "پ": str(row.get(1, "")).strip() if 1 in row else "",
-            "خ": str(row.get(0, "")).strip() if 0 in row else ""
+            "ص": convert_to_int(row.get(4, "") if 4 in row else ""),
+            "ن": convert_to_int(row.get(3, "") if 3 in row else ""),
+            "ش": convert_to_int(row.get(2, "") if 2 in row else ""),
+            "پ": convert_to_int(row.get(1, "") if 1 in row else ""),
+            "خ": convert_to_int(row.get(0, "") if 0 in row else "")
         }
         persons.append(person)
     
@@ -186,11 +203,11 @@ def convert_employer_to_structured(df):
             "name": name,
             "position": position,
             "company": company,
-            "ص": str(row.get(4, "")).strip() if 4 in row else "",
-            "ن": str(row.get(3, "")).strip() if 3 in row else "",
-            "ش": str(row.get(2, "")).strip() if 2 in row else "",
-            "پ": str(row.get(1, "")).strip() if 1 in row else "",
-            "خ": str(row.get(0, "")).strip() if 0 in row else ""
+            "ص": convert_to_int(row.get(4, "") if 4 in row else ""),
+            "ن": convert_to_int(row.get(3, "") if 3 in row else ""),
+            "ش": convert_to_int(row.get(2, "") if 2 in row else ""),
+            "پ": convert_to_int(row.get(1, "") if 1 in row else ""),
+            "خ": convert_to_int(row.get(0, "") if 0 in row else "")
         }
         persons.append(person)
     
@@ -342,11 +359,11 @@ def convert_total_to_structured(df):
         if main_key:
             # استخراج 5 value: صبحانه، ناهار، شام، پس شام، خدمات
             values = {
-                "صبحانه": "",
-                "ناهار": "",
-                "شام": "",
-                "پس شام": "",
-                "خدمات": ""
+                "صبحانه": 0,
+                "ناهار": 0,
+                "شام": 0,
+                "پس شام": 0,
+                "خدمات": 0
             }
             
             # اگر هدر پیدا کردیم، از mapping استفاده کن
@@ -354,16 +371,14 @@ def convert_total_to_structured(df):
                 for key_name, col_idx in header_cols.items():
                     if col_idx in row:
                         val = str(row.get(col_idx, "")).strip()
-                        if val:
-                            values[key_name] = val
+                        values[key_name] = convert_to_int(val)
             else:
                 # اگر هدر پیدا نکردیم، از ستون‌های بعد از key اصلی استفاده کن
                 for idx, key_name in enumerate(["صبحانه", "ناهار", "شام", "پس شام", "خدمات"]):
                     col_idx = main_key_col + 1 + idx
                     if col_idx in row:
                         val = str(row.get(col_idx, "")).strip()
-                        if val:
-                            values[key_name] = val
+                        values[key_name] = convert_to_int(val)
             
             total_data[main_key] = values
     
@@ -466,11 +481,11 @@ def extract_tables_from_dcr(pdf_file, output_folder, tables_info):
                         
                         if total_row:
                             all_tables_data["Operation"]["ShiftTotalPage1"] = {
-                                "ص": str(total_row.get(4, "")).strip() if 4 in total_row else "",
-                                "ن": str(total_row.get(3, "")).strip() if 3 in total_row else "",
-                                "ش": str(total_row.get(2, "")).strip() if 2 in total_row else "",
-                                "پ": str(total_row.get(1, "")).strip() if 1 in total_row else "",
-                                "خ": str(total_row.get(0, "")).strip() if 0 in total_row else ""
+                                "ص": convert_to_int(total_row.get(4, "") if 4 in total_row else ""),
+                                "ن": convert_to_int(total_row.get(3, "") if 3 in total_row else ""),
+                                "ش": convert_to_int(total_row.get(2, "") if 2 in total_row else ""),
+                                "پ": convert_to_int(total_row.get(1, "") if 1 in total_row else ""),
+                                "خ": convert_to_int(total_row.get(0, "") if 0 in total_row else "")
                             }
                         else:
                             all_tables_data["Operation"]["ShiftTotalPage1"] = {}
@@ -503,11 +518,11 @@ def extract_tables_from_dcr(pdf_file, output_folder, tables_info):
                         
                         if total_row:
                             all_tables_data["Herasat"]["ShiftTotalHerasat"] = {
-                                "ص": str(total_row.get(4, "")).strip() if 4 in total_row else "",
-                                "ن": str(total_row.get(3, "")).strip() if 3 in total_row else "",
-                                "ش": str(total_row.get(2, "")).strip() if 2 in total_row else "",
-                                "پ": str(total_row.get(1, "")).strip() if 1 in total_row else "",
-                                "خ": str(total_row.get(0, "")).strip() if 0 in total_row else ""
+                                "ص": convert_to_int(total_row.get(4, "") if 4 in total_row else ""),
+                                "ن": convert_to_int(total_row.get(3, "") if 3 in total_row else ""),
+                                "ش": convert_to_int(total_row.get(2, "") if 2 in total_row else ""),
+                                "پ": convert_to_int(total_row.get(1, "") if 1 in total_row else ""),
+                                "خ": convert_to_int(total_row.get(0, "") if 0 in total_row else "")
                             }
                         else:
                             all_tables_data["Herasat"]["ShiftTotalHerasat"] = {}
@@ -540,11 +555,11 @@ def extract_tables_from_dcr(pdf_file, output_folder, tables_info):
                         
                         if total_row:
                             all_tables_data["Ordogahi"]["ShiftTotalOrdogahi"] = {
-                                "ص": str(total_row.get(4, "")).strip() if 4 in total_row else "",
-                                "ن": str(total_row.get(3, "")).strip() if 3 in total_row else "",
-                                "ش": str(total_row.get(2, "")).strip() if 2 in total_row else "",
-                                "پ": str(total_row.get(1, "")).strip() if 1 in total_row else "",
-                                "خ": str(total_row.get(0, "")).strip() if 0 in total_row else ""
+                                "ص": convert_to_int(total_row.get(4, "") if 4 in total_row else ""),
+                                "ن": convert_to_int(total_row.get(3, "") if 3 in total_row else ""),
+                                "ش": convert_to_int(total_row.get(2, "") if 2 in total_row else ""),
+                                "پ": convert_to_int(total_row.get(1, "") if 1 in total_row else ""),
+                                "خ": convert_to_int(total_row.get(0, "") if 0 in total_row else "")
                             }
                         else:
                             all_tables_data["Ordogahi"]["ShiftTotalOrdogahi"] = {}
@@ -566,11 +581,11 @@ def extract_tables_from_dcr(pdf_file, output_folder, tables_info):
                         
                         if total_row:
                             all_tables_data["employer"]["EmployerTotal"] = {
-                                "ص": str(total_row.get(4, "")).strip() if 4 in total_row else "",
-                                "ن": str(total_row.get(3, "")).strip() if 3 in total_row else "",
-                                "ش": str(total_row.get(2, "")).strip() if 2 in total_row else "",
-                                "پ": str(total_row.get(1, "")).strip() if 1 in total_row else "",
-                                "خ": str(total_row.get(0, "")).strip() if 0 in total_row else ""
+                                "ص": convert_to_int(total_row.get(4, "") if 4 in total_row else ""),
+                                "ن": convert_to_int(total_row.get(3, "") if 3 in total_row else ""),
+                                "ش": convert_to_int(total_row.get(2, "") if 2 in total_row else ""),
+                                "پ": convert_to_int(total_row.get(1, "") if 1 in total_row else ""),
+                                "خ": convert_to_int(total_row.get(0, "") if 0 in total_row else "")
                             }
                         else:
                             all_tables_data["employer"]["EmployerTotal"] = {}
@@ -612,11 +627,11 @@ def extract_tables_from_dcr(pdf_file, output_folder, tables_info):
                         
                         if total_row:
                             all_tables_data["Drilling"]["DrillingTotal"] = {
-                                "ص": str(total_row.get(4, "")).strip() if 4 in total_row else "",
-                                "ن": str(total_row.get(3, "")).strip() if 3 in total_row else "",
-                                "ش": str(total_row.get(2, "")).strip() if 2 in total_row else "",
-                                "پ": str(total_row.get(1, "")).strip() if 1 in total_row else "",
-                                "خ": str(total_row.get(0, "")).strip() if 0 in total_row else ""
+                                "ص": convert_to_int(total_row.get(4, "") if 4 in total_row else ""),
+                                "ن": convert_to_int(total_row.get(3, "") if 3 in total_row else ""),
+                                "ش": convert_to_int(total_row.get(2, "") if 2 in total_row else ""),
+                                "پ": convert_to_int(total_row.get(1, "") if 1 in total_row else ""),
+                                "خ": convert_to_int(total_row.get(0, "") if 0 in total_row else "")
                             }
                         else:
                             all_tables_data["Drilling"]["DrillingTotal"] = {}
