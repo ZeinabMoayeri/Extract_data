@@ -232,14 +232,15 @@ def convert_foods_to_structured(df):
             next_val = str(row.get(i + 1, "")).strip() if i + 1 in row else ""
             
             # صبحانه، ناهار، شام، پس شام: value در ستون قبلی (i-1)
+            # توجه: "پس شام" را قبل از "شام" بررسی می‌کنیم چون "پس شام" شامل "شام" است
             if "صبحانه" in key and prev_val:
                 foods_data["صبحانه"] = prev_val
             elif "ناهار" in key and prev_val:
                 foods_data["ناهار"] = prev_val
-            elif "شام" in key and prev_val:
-                foods_data["شام"] = prev_val
             elif ("پس شام" in key or "پس‌شام" in key) and prev_val:
                 foods_data["پس شام"] = prev_val
+            elif "شام" in key and prev_val:
+                foods_data["شام"] = prev_val
             elif "توضیحات" in key:
                 # توضیحات: value در row پایینی یا در ستون کناری
                 if next_val:
@@ -265,6 +266,109 @@ def convert_foods_to_structured(df):
     
     return foods_data
 
+def convert_total_to_structured(df):
+    """
+    تبدیل داده‌های Total به ساختار جدید
+    df: DataFrame مربوط به Total
+    ساختار: 7 key اصلی که هر کدام 5 value دارند (صبحانه، ناهار، شام، پس شام، خدمات)
+    """
+    if df.empty:
+        return {}
+    
+    total_data = {}
+    
+    # تبدیل به records
+    records = df.to_dict('records')
+    
+    if len(records) == 0:
+        return {}
+    
+    # پیدا کردن هدر جدول (ردیف اول که شامل صبحانه، ناهار، شام، پس شام، خدمات است)
+    header_cols = {}  # mapping از نام ستون به index
+    
+    first_row = records[0]
+    max_col = max(first_row.keys()) if first_row else 0
+    for i in range(max_col + 1):
+        val = str(first_row.get(i, "")).strip() if i in first_row else ""
+        # حذف فاصله‌ها و کاراکترهای اضافی برای مقایسه بهتر
+        val_clean = val.replace(" ", "").replace("\t", "").replace("\n", "").replace("،", "")
+        
+        # بررسی با حذف فاصله‌ها (مثلاً "خدما ت" -> "خدمات", "شا م" -> "شام")
+        if "صبحانه" in val_clean:
+            header_cols["صبحانه"] = i
+        elif "ناهار" in val_clean:
+            header_cols["ناهار"] = i
+        elif "پسشام" in val_clean or ("پس" in val_clean and "شام" in val_clean):
+            header_cols["پس شام"] = i
+        elif "شام" in val_clean:
+            header_cols["شام"] = i
+        elif "خدمات" in val_clean:
+            header_cols["خدمات"] = i
+    
+    # اگر هدر پیدا نشد، از ردیف اول شروع کن، وگرنه از ردیف دوم
+    start_idx = 1 if header_cols else 0
+    
+    # بررسی هر ردیف برای پیدا کردن کلیدهای اصلی (7 ردیف)
+    for row_idx in range(start_idx, min(start_idx + 7, len(records))):
+        row = records[row_idx]
+        max_col = max(row.keys()) if row else 0
+        
+        # پیدا کردن کلید اصلی: اولین ستونی که متن دارد و عدد نیست
+        main_key = None
+        main_key_col = None
+        
+        # بررسی ستون‌ها از چپ به راست
+        for i in range(max_col + 1):
+            val = str(row.get(i, "")).strip() if i in row else ""
+            
+            if val:
+                # بررسی کن که آیا این یک عدد نیست
+                is_number = False
+                try:
+                    # حذف فاصله و کاما و بررسی عدد
+                    clean_val = val.replace(",", "").replace(" ", "").replace("-", "").replace("+", "")
+                    if clean_val:
+                        float(clean_val)
+                        is_number = True
+                except:
+                    pass
+                
+                # اگر عدد نیست و طول مناسبی دارد، احتمالاً کلید اصلی است
+                if not is_number and len(val) > 1:
+                    main_key = val
+                    main_key_col = i
+                    break
+        
+        if main_key:
+            # استخراج 5 value: صبحانه، ناهار، شام، پس شام، خدمات
+            values = {
+                "صبحانه": "",
+                "ناهار": "",
+                "شام": "",
+                "پس شام": "",
+                "خدمات": ""
+            }
+            
+            # اگر هدر پیدا کردیم، از mapping استفاده کن
+            if header_cols:
+                for key_name, col_idx in header_cols.items():
+                    if col_idx in row:
+                        val = str(row.get(col_idx, "")).strip()
+                        if val:
+                            values[key_name] = val
+            else:
+                # اگر هدر پیدا نکردیم، از ستون‌های بعد از key اصلی استفاده کن
+                for idx, key_name in enumerate(["صبحانه", "ناهار", "شام", "پس شام", "خدمات"]):
+                    col_idx = main_key_col + 1 + idx
+                    if col_idx in row:
+                        val = str(row.get(col_idx, "")).strip()
+                        if val:
+                            values[key_name] = val
+            
+            total_data[main_key] = values
+    
+    return total_data
+
 def extract_tables_from_dcr(pdf_file, output_folder, tables_info):
     if not os.path.exists(pdf_file):
         return
@@ -281,6 +385,7 @@ def extract_tables_from_dcr(pdf_file, output_folder, tables_info):
     all_tables_data["employer"] = {}
     all_tables_data["Drilling"] = {}
     all_tables_data["Foods"] = {}
+    all_tables_data["total"] = {}
         
     with pdfplumber.open(pdf_file) as pdf:
         for table_meta in tables_info:
@@ -519,6 +624,10 @@ def extract_tables_from_dcr(pdf_file, output_folder, tables_info):
                     elif sheet_name == "Foods":
                         foods_data = convert_foods_to_structured(df)
                         all_tables_data["Foods"] = foods_data
+                    # اگر مربوط به Total است
+                    elif sheet_name == "Total":
+                        total_data = convert_total_to_structured(df)
+                        all_tables_data["total"] = total_data
                     else:
                         # برای جداول دیگر، به records تبدیل کن
                         table_records = df.to_dict('records')
@@ -630,7 +739,7 @@ def extract_tables_from_dcr(pdf_file, output_folder, tables_info):
     final_structure["employer"] = all_tables_data.get("employer", {})
     final_structure["Drilling"] = all_tables_data.get("Drilling", {})
     final_structure["Foods"] = all_tables_data.get("Foods", {})
-    final_structure["total"] = {}
+    final_structure["total"] = all_tables_data.get("total", {})
     
     # ذخیره همه جداول در یک فایل JSON
     if final_structure:
