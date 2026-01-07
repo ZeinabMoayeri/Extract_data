@@ -153,6 +153,118 @@ def convert_shift_to_structured(df):
     
     return {"persons": persons, "TotalShift": total_shift}
 
+def convert_employer_to_structured(df):
+    """
+    تبدیل داده‌های employer به ساختار جدید
+    df: DataFrame مربوط به employer
+    ترتیب ستون‌ها: نام، سمت، شرکت، ص، ن، ش، پ، خ
+    """
+    if df.empty or len(df) < 2:
+        return []
+    
+    persons = []
+    
+    # تبدیل به records برای پردازش راحت‌تر
+    records = df.to_dict('records')
+    
+    # رد کردن ردیف اول (هدر)
+    data_rows = records[1:]
+    
+    # استخراج اطلاعات افراد
+    # ترتیب ستون‌ها در employer (از راست به چپ): خ, پ, ش, ن, ص, company, position, name
+    # یعنی: column 0=خ, 1=پ, 2=ش, 3=ن, 4=ص, 5=company, 6=position, 7=name
+    for row in data_rows:
+        name = str(row.get(7, "")).strip() if 7 in row else ""
+        position = str(row.get(6, "")).strip() if 6 in row else ""
+        company = str(row.get(5, "")).strip() if 5 in row else ""
+        
+        # اگر نام یا پوزیشن خالی است، رد کن
+        if not name and not position:
+            continue
+        
+        person = {
+            "name": name,
+            "position": position,
+            "company": company,
+            "ص": str(row.get(4, "")).strip() if 4 in row else "",
+            "ن": str(row.get(3, "")).strip() if 3 in row else "",
+            "ش": str(row.get(2, "")).strip() if 2 in row else "",
+            "پ": str(row.get(1, "")).strip() if 1 in row else "",
+            "خ": str(row.get(0, "")).strip() if 0 in row else ""
+        }
+        persons.append(person)
+    
+    return persons
+
+def convert_foods_to_structured(df):
+    """
+    تبدیل داده‌های Foods به ساختار جدید
+    df: DataFrame مربوط به Foods
+    ساختار: صبحانه، ناهار، شام، پس شام (value در ستون کناری) و توضیحات (value در row پایینی)
+    """
+    if df.empty:
+        return {
+            "صبحانه": "",
+            "ناهار": "",
+            "شام": "",
+            "پس شام": "",
+            "توضیحات": ""
+        }
+    
+    foods_data = {
+        "صبحانه": "",
+        "ناهار": "",
+        "شام": "",
+        "پس شام": "",
+        "توضیحات": ""
+    }
+    
+    # تبدیل به records
+    records = df.to_dict('records')
+    
+    # پیدا کردن صبحانه، ناهار، شام، پس شام (value در ستون قبلی)
+    for row_idx, row in enumerate(records):
+        # بررسی همه ستون‌ها برای پیدا کردن key-value
+        max_col = max(row.keys()) if row else 0
+        for i in range(max_col + 1):
+            key = str(row.get(i, "")).strip() if i in row else ""
+            prev_val = str(row.get(i - 1, "")).strip() if i - 1 >= 0 and (i - 1) in row else ""
+            next_val = str(row.get(i + 1, "")).strip() if i + 1 in row else ""
+            
+            # صبحانه، ناهار، شام، پس شام: value در ستون قبلی (i-1)
+            if "صبحانه" in key and prev_val:
+                foods_data["صبحانه"] = prev_val
+            elif "ناهار" in key and prev_val:
+                foods_data["ناهار"] = prev_val
+            elif "شام" in key and prev_val:
+                foods_data["شام"] = prev_val
+            elif ("پس شام" in key or "پس‌شام" in key) and prev_val:
+                foods_data["پس شام"] = prev_val
+            elif "توضیحات" in key:
+                # توضیحات: value در row پایینی یا در ستون کناری
+                if next_val:
+                    foods_data["توضیحات"] = next_val
+                # یا ممکن است در همان سلول باشد (بعد از ":")
+                elif ":" in key:
+                    parts = key.split(":", 1)
+                    if len(parts) == 2:
+                        foods_data["توضیحات"] = parts[1].strip()
+    
+    # اگر توضیحات پیدا نشد، آخرین ردیف را بررسی کن (row پایینی)
+    if not foods_data["توضیحات"] and len(records) > 0:
+        last_row = records[-1]
+        # بررسی اینکه آیا ردیف آخر شامل توضیحات است
+        max_col = max(last_row.keys()) if last_row else 0
+        for i in range(max_col + 1):
+            val = str(last_row.get(i, "")).strip() if i in last_row else ""
+            if val and "توضیحات" not in val and val not in ["صبحانه", "ناهار", "شام", "پس شام", "پس‌شام"]:
+                # اگر مقدار طولانی است یا شامل متن است، احتمالاً توضیحات است
+                if len(val) > 5:
+                    foods_data["توضیحات"] = val
+                    break
+    
+    return foods_data
+
 def extract_tables_from_dcr(pdf_file, output_folder, tables_info):
     if not os.path.exists(pdf_file):
         return
@@ -162,8 +274,13 @@ def extract_tables_from_dcr(pdf_file, output_folder, tables_info):
     
     # دیکشنری برای ذخیره همه جداول
     all_tables_data = {}
-    # ایجاد ساختار Operation برای ذخیره شیفت‌ها
+    # ایجاد ساختار Operation، Herasat، Ordogahi، employer، Drilling و Foods برای ذخیره داده‌ها
     all_tables_data["Operation"] = {}
+    all_tables_data["Herasat"] = {}
+    all_tables_data["Ordogahi"] = {}
+    all_tables_data["employer"] = {}
+    all_tables_data["Drilling"] = {}
+    all_tables_data["Foods"] = {}
         
     with pdfplumber.open(pdf_file) as pdf:
         for table_meta in tables_info:
@@ -230,9 +347,19 @@ def extract_tables_from_dcr(pdf_file, output_folder, tables_info):
                     # اگر ShiftTotalPage1 است
                     elif sheet_name == "ShiftTotalPage1":
                         records = df.to_dict('records')
+                        total_row = None
+                        # بررسی ردیف‌ها برای پیدا کردن Total
                         if len(records) >= 3:
                             # ردیف سوم شامل Total است
                             total_row = records[2]
+                        elif len(records) >= 2:
+                            # اگر فقط 2 ردیف داریم، ردیف دوم را بررسی کن
+                            total_row = records[1]
+                        elif len(records) >= 1:
+                            # اگر فقط 1 ردیف داریم، همان را بررسی کن
+                            total_row = records[0]
+                        
+                        if total_row:
                             all_tables_data["Operation"]["ShiftTotalPage1"] = {
                                 "ص": str(total_row.get(4, "")).strip() if 4 in total_row else "",
                                 "ن": str(total_row.get(3, "")).strip() if 3 in total_row else "",
@@ -242,6 +369,156 @@ def extract_tables_from_dcr(pdf_file, output_folder, tables_info):
                             }
                         else:
                             all_tables_data["Operation"]["ShiftTotalPage1"] = {}
+                    # اگر مربوط به Herasat است (شیفت‌ها)
+                    elif sheet_name in ["HerasatShiftA", "HerasatShiftB", "HerasatShiftC", "HerasatShiftD"]:
+                        shift_data = convert_shift_to_structured(df)
+                        # تبدیل نام sheet به نام شیفت (مثلاً HerasatShiftA -> ShiftA)
+                        shift_name = sheet_name.replace("Herasat", "")
+                        # ایجاد لیست اشخاص
+                        shift_list = shift_data["persons"].copy() if shift_data["persons"] else []
+                        # اضافه کردن TotalShift در انتها
+                        if shift_data["TotalShift"]:
+                            total_key = f"Total{shift_name}"
+                            shift_list.append({total_key: shift_data["TotalShift"]})
+                        all_tables_data["Herasat"][shift_name] = shift_list
+                    # اگر ShiftTotalHerasat است
+                    elif sheet_name == "ShiftTotalHerasat":
+                        records = df.to_dict('records')
+                        total_row = None
+                        # بررسی ردیف‌ها برای پیدا کردن Total
+                        if len(records) >= 3:
+                            # ردیف سوم شامل Total است
+                            total_row = records[2]
+                        elif len(records) >= 2:
+                            # اگر فقط 2 ردیف داریم، ردیف دوم را بررسی کن
+                            total_row = records[1]
+                        elif len(records) >= 1:
+                            # اگر فقط 1 ردیف داریم، همان را بررسی کن
+                            total_row = records[0]
+                        
+                        if total_row:
+                            all_tables_data["Herasat"]["ShiftTotalHerasat"] = {
+                                "ص": str(total_row.get(4, "")).strip() if 4 in total_row else "",
+                                "ن": str(total_row.get(3, "")).strip() if 3 in total_row else "",
+                                "ش": str(total_row.get(2, "")).strip() if 2 in total_row else "",
+                                "پ": str(total_row.get(1, "")).strip() if 1 in total_row else "",
+                                "خ": str(total_row.get(0, "")).strip() if 0 in total_row else ""
+                            }
+                        else:
+                            all_tables_data["Herasat"]["ShiftTotalHerasat"] = {}
+                    # اگر مربوط به Ordogahi است (شیفت‌ها)
+                    elif sheet_name in ["OrdogahiShiftA", "OrdogahiShiftB", "OrdogahiShiftC", "OrdogahiShiftD"]:
+                        shift_data = convert_shift_to_structured(df)
+                        # تبدیل نام sheet به نام شیفت (مثلاً OrdogahiShiftA -> ShiftA)
+                        shift_name = sheet_name.replace("Ordogahi", "")
+                        # ایجاد لیست اشخاص
+                        shift_list = shift_data["persons"].copy() if shift_data["persons"] else []
+                        # اضافه کردن TotalShift در انتها
+                        if shift_data["TotalShift"]:
+                            total_key = f"Total{shift_name}"
+                            shift_list.append({total_key: shift_data["TotalShift"]})
+                        all_tables_data["Ordogahi"][shift_name] = shift_list
+                    # اگر ShiftTotalOrdogahi است
+                    elif sheet_name == "ShiftTotalOrdogahi":
+                        records = df.to_dict('records')
+                        total_row = None
+                        # بررسی ردیف‌ها برای پیدا کردن Total
+                        if len(records) >= 3:
+                            # ردیف سوم شامل Total است
+                            total_row = records[2]
+                        elif len(records) >= 2:
+                            # اگر فقط 2 ردیف داریم، ردیف دوم را بررسی کن
+                            total_row = records[1]
+                        elif len(records) >= 1:
+                            # اگر فقط 1 ردیف داریم، همان را بررسی کن
+                            total_row = records[0]
+                        
+                        if total_row:
+                            all_tables_data["Ordogahi"]["ShiftTotalOrdogahi"] = {
+                                "ص": str(total_row.get(4, "")).strip() if 4 in total_row else "",
+                                "ن": str(total_row.get(3, "")).strip() if 3 in total_row else "",
+                                "ش": str(total_row.get(2, "")).strip() if 2 in total_row else "",
+                                "پ": str(total_row.get(1, "")).strip() if 1 in total_row else "",
+                                "خ": str(total_row.get(0, "")).strip() if 0 in total_row else ""
+                            }
+                        else:
+                            all_tables_data["Ordogahi"]["ShiftTotalOrdogahi"] = {}
+                    # اگر مربوط به employer است
+                    elif sheet_name == "EmployerPage3":
+                        persons_list = convert_employer_to_structured(df)
+                        all_tables_data["employer"]["EmployerPage3"] = persons_list
+                    # اگر EmployerTotal است
+                    elif sheet_name == "EmployerTotal":
+                        records = df.to_dict('records')
+                        total_row = None
+                        # بررسی ردیف‌ها برای پیدا کردن Total
+                        if len(records) >= 3:
+                            total_row = records[2]
+                        elif len(records) >= 2:
+                            total_row = records[1]
+                        elif len(records) >= 1:
+                            total_row = records[0]
+                        
+                        if total_row:
+                            all_tables_data["employer"]["EmployerTotal"] = {
+                                "ص": str(total_row.get(4, "")).strip() if 4 in total_row else "",
+                                "ن": str(total_row.get(3, "")).strip() if 3 in total_row else "",
+                                "ش": str(total_row.get(2, "")).strip() if 2 in total_row else "",
+                                "پ": str(total_row.get(1, "")).strip() if 1 in total_row else "",
+                                "خ": str(total_row.get(0, "")).strip() if 0 in total_row else ""
+                            }
+                        else:
+                            all_tables_data["employer"]["EmployerTotal"] = {}
+                    # اگر EmployerSupervisor است
+                    elif sheet_name == "EmployerSupervisor":
+                        # EmployerSupervisor: ردیف دوم را می‌گیریم
+                        records = df.to_dict('records')
+                        supervisor_data = {}
+                        # بررسی وجود ردیف دوم
+                        if len(records) >= 2:
+                            # ردیف دوم را بگیر
+                            second_row = records[1]
+                            # تبدیل به دیکشنری ساده
+                            for key, value in second_row.items():
+                                if value and str(value).strip():
+                                    supervisor_data[str(key)] = str(value).strip()
+                        elif len(records) >= 1:
+                            # اگر فقط یک ردیف داریم، همان را بگیر
+                            first_row = records[0]
+                            for key, value in first_row.items():
+                                if value and str(value).strip():
+                                    supervisor_data[str(key)] = str(value).strip()
+                        all_tables_data["employer"]["EmployerSupervisor"] = supervisor_data
+                    # اگر مربوط به Drilling است
+                    elif sheet_name == "DrillingPage4":
+                        persons_list = convert_employer_to_structured(df)
+                        all_tables_data["Drilling"]["DrillingPage4"] = persons_list
+                    # اگر DrillingTotal است
+                    elif sheet_name == "DrillingTotal":
+                        records = df.to_dict('records')
+                        total_row = None
+                        # بررسی ردیف‌ها برای پیدا کردن Total
+                        if len(records) >= 3:
+                            total_row = records[2]
+                        elif len(records) >= 2:
+                            total_row = records[1]
+                        elif len(records) >= 1:
+                            total_row = records[0]
+                        
+                        if total_row:
+                            all_tables_data["Drilling"]["DrillingTotal"] = {
+                                "ص": str(total_row.get(4, "")).strip() if 4 in total_row else "",
+                                "ن": str(total_row.get(3, "")).strip() if 3 in total_row else "",
+                                "ش": str(total_row.get(2, "")).strip() if 2 in total_row else "",
+                                "پ": str(total_row.get(1, "")).strip() if 1 in total_row else "",
+                                "خ": str(total_row.get(0, "")).strip() if 0 in total_row else ""
+                            }
+                        else:
+                            all_tables_data["Drilling"]["DrillingTotal"] = {}
+                    # اگر مربوط به Foods است
+                    elif sheet_name == "Foods":
+                        foods_data = convert_foods_to_structured(df)
+                        all_tables_data["Foods"] = foods_data
                     else:
                         # برای جداول دیگر، به records تبدیل کن
                         table_records = df.to_dict('records')
@@ -265,13 +542,69 @@ def extract_tables_from_dcr(pdf_file, output_folder, tables_info):
     if "ShiftTotalPage1" not in all_tables_data["Operation"]:
         all_tables_data["Operation"]["ShiftTotalPage1"] = {}
     
-    # اضافه کردن بخش‌های خالی دیگر
-    all_tables_data["Herasat"] = {}
-    all_tables_data["Ordogahi"] = {}
-    all_tables_data["employer"] = {}
-    all_tables_data["Drilling"] = {}
-    all_tables_data["Foods"] = {}
-    all_tables_data["total"] = {}
+    # اطمینان از وجود Herasat
+    if "Herasat" not in all_tables_data:
+        all_tables_data["Herasat"] = {}
+    
+    # اطمینان از وجود شیفت‌های Herasat به صورت لیست خالی اگر وجود نداشتند
+    if "ShiftA" not in all_tables_data["Herasat"]:
+        all_tables_data["Herasat"]["ShiftA"] = []
+    if "ShiftB" not in all_tables_data["Herasat"]:
+        all_tables_data["Herasat"]["ShiftB"] = []
+    if "ShiftC" not in all_tables_data["Herasat"]:
+        all_tables_data["Herasat"]["ShiftC"] = []
+    if "ShiftD" not in all_tables_data["Herasat"]:
+        all_tables_data["Herasat"]["ShiftD"] = []
+    if "ShiftTotalHerasat" not in all_tables_data["Herasat"]:
+        all_tables_data["Herasat"]["ShiftTotalHerasat"] = {}
+    
+    # اطمینان از وجود Ordogahi
+    if "Ordogahi" not in all_tables_data:
+        all_tables_data["Ordogahi"] = {}
+    
+    # اطمینان از وجود شیفت‌های Ordogahi به صورت لیست خالی اگر وجود نداشتند
+    if "ShiftA" not in all_tables_data["Ordogahi"]:
+        all_tables_data["Ordogahi"]["ShiftA"] = []
+    if "ShiftB" not in all_tables_data["Ordogahi"]:
+        all_tables_data["Ordogahi"]["ShiftB"] = []
+    if "ShiftC" not in all_tables_data["Ordogahi"]:
+        all_tables_data["Ordogahi"]["ShiftC"] = []
+    if "ShiftD" not in all_tables_data["Ordogahi"]:
+        all_tables_data["Ordogahi"]["ShiftD"] = []
+    if "ShiftTotalOrdogahi" not in all_tables_data["Ordogahi"]:
+        all_tables_data["Ordogahi"]["ShiftTotalOrdogahi"] = {}
+    
+    # اطمینان از وجود employer
+    if "employer" not in all_tables_data:
+        all_tables_data["employer"] = {}
+    
+    # اطمینان از وجود بخش‌های employer به صورت خالی اگر وجود نداشتند
+    if "EmployerPage3" not in all_tables_data["employer"]:
+        all_tables_data["employer"]["EmployerPage3"] = []
+    if "EmployerTotal" not in all_tables_data["employer"]:
+        all_tables_data["employer"]["EmployerTotal"] = {}
+    if "EmployerSupervisor" not in all_tables_data["employer"]:
+        all_tables_data["employer"]["EmployerSupervisor"] = {}
+    
+    # اطمینان از وجود Drilling
+    if "Drilling" not in all_tables_data:
+        all_tables_data["Drilling"] = {}
+    
+    # اطمینان از وجود بخش‌های Drilling به صورت خالی اگر وجود نداشتند
+    if "DrillingPage4" not in all_tables_data["Drilling"]:
+        all_tables_data["Drilling"]["DrillingPage4"] = []
+    if "DrillingTotal" not in all_tables_data["Drilling"]:
+        all_tables_data["Drilling"]["DrillingTotal"] = {}
+    
+    # اطمینان از وجود Foods
+    if "Foods" not in all_tables_data:
+        all_tables_data["Foods"] = {
+            "صبحانه": "",
+            "ناهار": "",
+            "شام": "",
+            "پس شام": "",
+            "توضیحات": ""
+        }
     
     # ساخت ساختار نهایی JSON با ترتیب صحیح
     final_structure = {}
@@ -297,7 +630,7 @@ def extract_tables_from_dcr(pdf_file, output_folder, tables_info):
     final_structure["employer"] = all_tables_data.get("employer", {})
     final_structure["Drilling"] = all_tables_data.get("Drilling", {})
     final_structure["Foods"] = all_tables_data.get("Foods", {})
-    final_structure["total"] = all_tables_data.get("total", {})
+    final_structure["total"] = {}
     
     # ذخیره همه جداول در یک فایل JSON
     if final_structure:
@@ -318,7 +651,7 @@ if __name__ == "__main__":
     output_folder = "./extract_tables_dcr"
     pdf_file = "DCR O3 1404 1007.pdf"
     
-    output_file= "DCR O3 1404 1007_flatten.pdf"
+    output_file= "DCR O3 1404 1007_flatten.pdf"  
     
     if not os.path.exists(output_file) and os.path.exists(pdf_file):
         flatten_with_pikepdf(pdf_file, output_file)
